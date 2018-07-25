@@ -37,8 +37,6 @@ class Autoscaler():
     """
     ERR_THRESHOLD = 10 # Maximum number of attempts to decode a response
     LOGGING_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    # UP = 1
-    # DOWN = -1
 
     def __init__(self):
         """Initialize the object with data from the command line or environment
@@ -565,11 +563,6 @@ class Autoscaler():
 
         self.cool_down_factor = float(args.cool_down_factor)
         self.trigger_number = float(args.trigger_number)
-
-        # The above variables are confusingly named; TODO rename completely, for now just copy
-        self.scale_down_delay = self.cool_down_factor
-        self.scale_up_delay   = self.trigger_number
-
 
 
     def get_task_agent_stats(self, task, agent):
