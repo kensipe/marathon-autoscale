@@ -185,102 +185,64 @@ class Autoscaler():
             app_avg_mem(float): The average memory utilization across all tasks for marathon_app
             num_of_messages: The approximate number of visible messages in the sqs queue
         """
-        cpu_range = 0
-        mem_range = 0
         direction = 0
 
-        if app_avg_cpu < self.min_cpu_time:
-            cpu_range = -1
-            self.log.info(("CPU Time {app_avg_cpu} "
-                           "below min threshold {min_cpu_time}")
-                          .format(app_avg_cpu=app_avg_cpu,
-                                  min_cpu_time=self.min_cpu_time))
-        elif app_avg_cpu > self.max_cpu_time:
-            cpu_range = 1
-            self.log.info(("CPU Time {app_avg_cpu} "
-                           "above max threshold {max_cpu_time}")
-                          .format(app_avg_cpu=app_avg_cpu,
-                                  max_cpu_time=self.max_cpu_time))
-        else:
-            self.log.info(("Autoscale metric '{metric_name}' value [{metric_value}] "
-                            "between thresholds [{min_threshold}:{max_threshold}]")
-                            .format(metric_name="CPU utilization",
-                                    metric_value=app_avg_cpu,
-                                    min_threshold=self.min_cpu_time,
-                                    max_threshold=self.max_cpu_time))
-
-
-        
-        if app_avg_mem < self.min_mem_percent:
-            mem_range = -1
-            self.log.info(("MEM Utilization {app_avg_mem} "
-                           "below min threshold {min_mem_percent}")
-                          .format(app_avg_mem=app_avg_mem,
-                                  min_mem_percent=self.min_mem_percent))
-        elif app_avg_mem > self.max_mem_percent:
-            mem_range = 1
-            self.log.info(("MEM Utilization {app_avg_mem} "
-                           "above max threshold {max_mem_percent}")
-                          .format(app_avg_mem=app_avg_mem,
-                                  max_mem_percent=self.max_mem_percent))
-        else:
-            self.log.info(("Autoscale metric '{metric_name}' value [{metric_value}] "
-                            "between thresholds [{min_threshold}:{max_threshold}]")
-                            .format(metric_name="MEM utilization",
-                                    metric_value=app_avg_mem,
-                                    min_threshold=self.min_mem_percent,
-                                    max_threshold=self.max_mem_percent))
-
-        if self.trigger_mode == "and":
-            if cpu_range == 1 and mem_range == 1:
-                self.log.info("AND logic met: both upper thresholds exceeded")
-                direction = 1
-            elif cpu_range == -1 and mem_range == -1:
-                self.log.info("AND logic met: both lower thresholds exceeded")
-                direction = -1
-            elif cpu_range == 0 and mem_range == 0:
-                self.log.info("AND logic not met: neither metric threshold exceeded")
-            elif cpu_range == 0 or mem_range == 0:
-                self.log.info("AND logic not met: only one metric threshold exceeded")
-            else:
-                self.log.info("AND logic not met: metric thresholds exceeded in opposing directions")
-
-            count_and_scale_app(direction)
-
-        elif self.trigger_mode == "or":
-            if (cpu_range + mem_range) == 2:
-                self.log.info("OR logic met: both upper thresholds exceeded")
-                direction = 1
-            elif (cpu_range + mem_range) == -2:
-                self.log.info("OR logic met: both lower thresholds exceeded")
-                direction = -1
-            elif cpu_range == 0 and mem_range == 0:
-                self.log.info("OR logic not met: neither metric threshold exceeded")
-            elif (cpu_range + mem_range) == 0:
-                self.log.info("OR logic not met: metrics exceeded in opposing directions")
-            elif (cpu_range + mem_range) == 1:
-                self.log.info("OR logic met: one upper threshold exceeded")
-                direction = 1
-            elif (cpu_range + mem_range) == -1:
-                self.log.info("OR logic met: one lower threshold exceeded")
-                direction = -1
-
-            count_and_scale_app(direction)
-
-        elif self.trigger_mode == "cpu":
-            self.autoscale_metric("CPU utilization",
+        # Each of these will log one message: metric above/below threshold
+        cpu_direction = self.determine_scale_direction("CPU utilization",
                                     app_avg_cpu,
                                     self.min_cpu_time,
                                     self.max_cpu_time)
 
-        elif self.trigger_mode == "mem":
-            self.autoscale_metric("Memory utilization",
+        mem_direction = self.determine_scale_direction("Memory utilization",
                                     app_avg_mem,
                                     self.min_mem_percent,
                                     self.max_mem_percent)
 
-    def autoscale_metric(self, metric_name, metric_value, min_threshold, max_threshold):
+        if self.trigger_mode == "and":
+            if cpu_direction == 1 and mem_direction == 1:
+                self.log.info("AND logic met: both upper thresholds exceeded")
+                direction = 1
+            elif cpu_direction == -1 and mem_direction == -1:
+                self.log.info("AND logic met: both lower thresholds exceeded")
+                direction = -1
+            elif cpu_direction == 0 and mem_direction == 0:
+                self.log.info("AND logic not met: neither metric threshold exceeded")
+            elif cpu_direction == 0 or mem_direction == 0:
+                self.log.info("AND logic not met: only one metric threshold exceeded")
+            else:
+                self.log.info("AND logic not met: metric thresholds exceeded in opposing directions")
+
+        elif self.trigger_mode == "or":
+            if (cpu_direction + mem_direction) == 2:
+                self.log.info("OR logic met: both upper thresholds exceeded")
+                direction = 1
+            elif (cpu_direction + mem_direction) == -2:
+                self.log.info("OR logic met: both lower thresholds exceeded")
+                direction = -1
+            elif cpu_direction == 0 and mem_direction == 0:
+                self.log.info("OR logic not met: neither metric threshold exceeded")
+            elif (cpu_direction + mem_direction) == 0:
+                self.log.info("OR logic not met: metrics exceeded in opposing directions")
+            elif (cpu_direction + mem_direction) == 1:
+                self.log.info("OR logic met: one upper threshold exceeded")
+                direction = 1
+            elif (cpu_direction + mem_direction) == -1:
+                self.log.info("OR logic met: one lower threshold exceeded")
+                direction = -1
+
+        elif self.trigger_mode == "cpu":
+            self.log.info("CPU mode: ignoring mem threshold")
+            direction = cpu_direction
+
+        elif self.trigger_mode == "mem":
+            self.log.info("MEM mode: ignoring cpu threshold")
+            direction = mem_direction
+
+        self.scale_in_direction(direction)
+
+    def determine_scale_direction(self, metric_name, metric_value, min_threshold, max_threshold):
         direction = 0
+
         if metric_value < min_threshold:
             self.log.info(("Autoscale metric '{metric_name}' value [{metric_value}] "
                             "below min threshold [{min_threshold}]")
@@ -307,10 +269,9 @@ class Autoscaler():
                                     min_threshold=min_threshold,
                                     max_threshold=max_threshold))
         
-        count_and_scale_app(direction)
+        return direction
 
-    # This will eventually replace scale_app
-    def count_and_scale_app(self, direction):
+    def scale_in_direction(self, direction):
         """Scale marathon_app up or down
         Args:
             direction(1/0/-1): Scale up, stay, or down
@@ -689,10 +650,12 @@ class Autoscaler():
                     self.timer()
                     continue
 
-                self.autoscale_metric("SQS Queue length", 
-                                      num_of_messages,
-                                      self.min_sqs_length,
-                                      self.min_sqs_length)
+                direction = self.determine_scale_direction("SQS Queue length", 
+                                                  num_of_messages,
+                                                  self.min_sqs_length,
+                                                  self.min_sqs_length)
+
+                self.scale_in_direction(direction)
             
             # Otherwise, process based on and/or/cpu/mem logic
             else:
