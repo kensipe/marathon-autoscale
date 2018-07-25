@@ -177,7 +177,7 @@ class Autoscaler():
 
     # pylint: disable=too-many-branches
     # pylint: disable=too-many-statements
-    def autoscale(self, app_avg_cpu, app_avg_mem):
+    def autoscale_cpu_mem(self, app_avg_cpu, app_avg_mem):
         """Check the marathon_app's average cpu and or memory usage and make decision
         about scaling up or down
         Args:
@@ -776,7 +776,7 @@ class Autoscaler():
                             self.marathon_app, app_avg_mem)
                 #Evaluate whether an autoscale trigger is called for
 
-                self.autoscale(app_avg_cpu, app_avg_mem)
+                self.autoscale_cpu_mem(app_avg_cpu, app_avg_mem)
 
             self.timer()
 
