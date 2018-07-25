@@ -185,149 +185,127 @@ class Autoscaler():
             app_avg_mem(float): The average memory utilization across all tasks for marathon_app
             num_of_messages: The approximate number of visible messages in the sqs queue
         """
-        if self.trigger_mode == "and":
-            if ((self.min_cpu_time <= app_avg_cpu <= self.max_cpu_time)
-                    and (self.min_mem_percent <= app_avg_mem <= self.max_mem_percent)):
-                self.log.info("CPU and Memory within thresholds")
-                self.trigger_var = 0
-                self.cool_down = 0
-            elif ((app_avg_cpu > self.max_cpu_time) and (app_avg_mem > self.max_mem_percent)
-                  and (self.trigger_var >= self.trigger_number)):
-                self.log.info("Autoscale triggered based on Mem and CPU exceeding threshold")
-                self.scale_app(True)
-                self.trigger_var = 0
-            elif ((app_avg_cpu < self.max_cpu_time) and (app_avg_mem < self.max_mem_percent)
-                  and (self.cool_down >= self.cool_down_factor)):
-                self.log.info("Autoscale triggered based on Mem and CPU below the threshold")
-                self.scale_app(False)
-                self.cool_down = 0
-            elif (app_avg_cpu > self.max_cpu_time) and (app_avg_mem > self.max_mem_percent):
-                self.trigger_var += 1
-                self.cool_down = 0
-                self.log.info(("Limits exceeded but waiting for trigger_number"
-                               " to be exceeded too to scale up %s of %s"),
-                              self.trigger_var, self.trigger_number)
-            elif ((app_avg_cpu < self.max_cpu_time) and (app_avg_mem < self.max_mem_percent)
-                  and (self.cool_down < self.cool_down_factor)):
-                self.cool_down += 1
-                self.trigger_var = 0
-                self.log.info(("Limits are not exceeded but waiting for "
-                               "cool_down to be exceeded too to scale "
-                               "down %s of %s"),
-                              self.cool_down, self.cool_down_factor)
-            else:
-                self.log.info("Mem and CPU usage exceeding thresholds")
-        elif self.trigger_mode == "or":
-            if ((self.min_cpu_time <= app_avg_cpu <= self.max_cpu_time)
-                    and (self.min_mem_percent <= app_avg_mem <= self.max_mem_percent)):
-                self.log.info("CPU or Memory within thresholds")
-                self.trigger_var = 0
-                self.cool_down = 0
-            elif (((app_avg_cpu > self.max_cpu_time) or (app_avg_mem > self.max_mem_percent))
-                  and (self.trigger_var >= self.trigger_number)):
-                self.log.info("Autoscale triggered based Mem or CPU exceeding threshold")
-                self.scale_app(True)
-                self.trigger_var = 0
-            elif (((app_avg_cpu < self.max_cpu_time) or (app_avg_mem < self.max_mem_percent))
-                  and (self.cool_down >= self.cool_down_factor)):
-                self.log.info("Autoscale triggered based on Mem or CPU under the threshold")
-                self.scale_app(False)
-                self.cool_down = 0
-            elif (app_avg_cpu > self.max_cpu_time) or (app_avg_mem > self.max_mem_percent):
-                self.trigger_var += 1
-                self.cool_down = 0
-                self.log.info(("Mem or CPU limits exceeded but waiting for "
-                               "trigger_number to be exceeded too to scale up %s of %s"),
-                              self.trigger_var, self.trigger_number)
-            elif (app_avg_cpu < self.max_cpu_time) or (app_avg_mem < self.max_mem_percent):
-                self.cool_down += 1
-                self.trigger_var = 0
-                self.log.info(("Mem or CPU limits are not exceeded but waiting for "
-                               "cool_down to be exceeded too to scale down %s of %s"),
-                              self.cool_down, self.cool_down_factor)
-            else:
-                self.log.info("Mem or CPU usage not exceeding thresholds")
-        elif self.trigger_mode == "cpu":
-            if self.min_cpu_time <= app_avg_cpu <= self.max_cpu_time:
-                self.log.info("CPU within thresholds")
-                self.trigger_var = 0
-                self.cool_down = 0
-            elif (app_avg_cpu > self.max_cpu_time) and (self.trigger_var >= self.trigger_number):
-                self.log.info("Autoscale triggered based on CPU exceeding threshold")
-                self.scale_app(True)
-                self.trigger_var = 0
-            elif (app_avg_cpu < self.max_cpu_time) and (self.cool_down >= self.cool_down_factor):
-                self.log.info("Autoscale triggered based on CPU under the threshold")
-                self.scale_app(False)
-                self.cool_down = 0
-            elif app_avg_cpu > self.max_cpu_time:
-                self.trigger_var += 1
-                self.cool_down = 0
-                self.log.info(("CPU limits exceeded but waiting for "
-                               "trigger_number to be exceeded too to scale "
-                               "up %s of %s"),
-                              self.trigger_var, self.trigger_number)
-            elif app_avg_cpu < self.max_cpu_time:
-                self.cool_down += 1
-                self.trigger_var = 0
-                self.log.info(("CPU limits are not exceeded but waiting for "
-                               "cool_down to be exceeded too to scale down %s of %s"),
-                              self.cool_down, self.cool_down_factor)
-            else:
-                self.log.info("CPU usage not exceeding threshold")
-        elif self.trigger_mode == "mem":
-            if self.min_mem_percent <= app_avg_mem <= self.max_mem_percent:
-                self.log.info("Memory within thresholds")
-                self.trigger_var = 0
-                self.cool_down = 0
-            elif ((app_avg_mem > self.max_mem_percent) and
-                  (self.trigger_var >= self.trigger_number)):
-                self.log.info("Autoscale triggered based Mem exceeding threshold")
-                self.scale_app(True)
-                self.trigger_var = 0
-            elif ((app_avg_mem < self.max_mem_percent) and
-                  (self.cool_down >= self.cool_down_factor)):
-                self.log.info("Autoscale triggered based on Mem below the threshold")
-                self.scale_app(False)
-                self.cool_down = 0
-            elif app_avg_mem > self.max_mem_percent:
-                self.trigger_var += 1
-                self.cool_down = 0
-                self.log.info(("Mem limits exceeded but waiting for "
-                               "trigger_number to be exceeded too to scale "
-                               "up %s of %s"),
-                              self.trigger_var, self.trigger_number)
-            elif app_avg_mem < self.max_mem_percent:
-                self.cool_down += 1
-                self.trigger_var = 0
-                self.log.info(("Mem limits are not exceeded but waiting for "
-                               "cool_down to be exceeded too to scale down"
-                               " %s of %s"),
-                              self.cool_down, self.cool_down_factor)
-            else:
-                self.log.info("Mem usage not exceeding threshold")
-
-    def autoscale_sqs(self, num_of_messages):
+        cpu_range = 0
+        mem_range = 0
         direction = 0
-        # Below min threshold
-        if num_of_messages < self.min_sqs_length:
-            self.log.info(("Queue length [{length}] "
-                            "below min threshold [{threshold}]")
-                            .format(length=num_of_messages,
-                                    threshold=self.min_sqs_length))
+
+        if app_avg_cpu < self.min_cpu_time:
+            cpu_range = -1
+            self.log.info(("CPU Time {app_avg_cpu} "
+                           "below min threshold {min_cpu_time}")
+                          .format(app_avg_cpu=app_avg_cpu,
+                                  min_cpu_time=self.min_cpu_time))
+        elif app_avg_cpu > self.max_cpu_time:
+            cpu_range = 1
+            self.log.info(("CPU Time {app_avg_cpu} "
+                           "above max threshold {max_cpu_time}")
+                          .format(app_avg_cpu=app_avg_cpu,
+                                  max_cpu_time=self.max_cpu_time))
+        else:
+            self.log.info(("Autoscale metric '{metric_name}' value [{metric_value}] "
+                            "between thresholds [{min_threshold}:{max_threshold}]")
+                            .format(metric_name="CPU utilization",
+                                    metric_value=app_avg_cpu,
+                                    min_threshold=self.min_cpu_time,
+                                    max_threshold=self.max_cpu_time))
+
+
+        
+        if app_avg_mem < self.min_mem_percent:
+            mem_range = -1
+            self.log.info(("MEM Utilization {app_avg_mem} "
+                           "below min threshold {min_mem_percent}")
+                          .format(app_avg_mem=app_avg_mem,
+                                  min_mem_percent=self.min_mem_percent))
+        elif app_avg_mem > self.max_mem_percent:
+            mem_range = 1
+            self.log.info(("MEM Utilization {app_avg_mem} "
+                           "above max threshold {max_mem_percent}")
+                          .format(app_avg_mem=app_avg_mem,
+                                  max_mem_percent=self.max_mem_percent))
+        else:
+            self.log.info(("Autoscale metric '{metric_name}' value [{metric_value}] "
+                            "between thresholds [{min_threshold}:{max_threshold}]")
+                            .format(metric_name="MEM utilization",
+                                    metric_value=app_avg_mem,
+                                    min_threshold=self.min_mem_percent,
+                                    max_threshold=self.max_mem_percent))
+
+        if self.trigger_mode == "and":
+            if cpu_range == 1 and mem_range == 1:
+                self.log.info("AND logic met: both upper thresholds exceeded")
+                direction = 1
+            elif cpu_range == -1 and mem_range == -1:
+                self.log.info("AND logic met: both lower thresholds exceeded")
+                direction = -1
+            elif cpu_range == 0 and mem_range == 0:
+                self.log.info("AND logic not met: neither metric threshold exceeded")
+            elif cpu_range == 0 or mem_range == 0:
+                self.log.info("AND logic not met: only one metric threshold exceeded")
+            else:
+                self.log.info("AND logic not met: metric thresholds exceeded in opposing directions")
+
+            count_and_scale_app(direction)
+
+        elif self.trigger_mode == "or":
+            if (cpu_range + mem_range) == 2:
+                self.log.info("OR logic met: both upper thresholds exceeded")
+                direction = 1
+            elif (cpu_range + mem_range) == -2:
+                self.log.info("OR logic met: both lower thresholds exceeded")
+                direction = -1
+            elif cpu_range == 0 and mem_range == 0:
+                self.log.info("OR logic not met: neither metric threshold exceeded")
+            elif (cpu_range + mem_range) == 0:
+                self.log.info("OR logic not met: metrics exceeded in opposing directions")
+            elif (cpu_range + mem_range) == 1:
+                self.log.info("OR logic met: one upper threshold exceeded")
+                direction = 1
+            elif (cpu_range + mem_range) == -1:
+                self.log.info("OR logic met: one lower threshold exceeded")
+                direction = -1
+
+            count_and_scale_app(direction)
+
+        elif self.trigger_mode == "cpu":
+            self.autoscale_metric("CPU utilization",
+                                    app_avg_cpu,
+                                    self.min_cpu_time,
+                                    self.max_cpu_time)
+
+        elif self.trigger_mode == "mem":
+            self.autoscale_metric("Memory utilization",
+                                    app_avg_mem,
+                                    self.min_mem_percent,
+                                    self.max_mem_percent)
+
+    def autoscale_metric(self, metric_name, metric_value, min_threshold, max_threshold):
+        direction = 0
+        if metric_value < min_threshold:
+            self.log.info(("Autoscale metric '{metric_name}' value [{metric_value}] "
+                            "below min threshold [{min_threshold}]")
+                            .format(metric_name=metric_name,
+                                    metric_value=metric_value,
+                                    min_threshold=min_threshold))
             direction = -1
             
         # Above max threshold
-        elif num_of_messages > self.max_sqs_length:
-            self.log.info(("Queue length [{length}] "
-                            "above max threshold [{threshold}]")
-                            .format(length=num_of_messages,
-                                    threshold=self.min_sqs_length))
+        elif metric_value > max_threshold:
+            self.log.info(("Autoscale metric '{metric_name}' value [{metric_value}] "
+                            "above max threshold [{max_threshold}]")
+                            .format(metric_name=metric_name,
+                                    metric_value=metric_value,
+                                    max_threshold=max_threshold))
             direction = 1
             
         # Within threshold
         else:
-            self.log.info("Queue length within thresholds")
+            self.log.info(("Autoscale metric '{metric_name}' value [{metric_value}] "
+                            "between thresholds [{min_threshold}:{max_threshold}]")
+                            .format(metric_name=metric_name,
+                                    metric_value=metric_value,
+                                    min_threshold=min_threshold,
+                                    max_threshold=max_threshold))
         
         count_and_scale_app(direction)
 
@@ -395,35 +373,6 @@ class Autoscaler():
                 # self.app_instances will be updated next time get_app_details is called
                 # TODO handle errors
                 self.log.debug("scale_app %s", response)
-
-    # This will eventually be removed and replaced with count_and_scale_app (hence repeated code)
-    def scale_app(self, is_up):
-        """Scale marathon_app up or down
-        Args:
-            is_up(bool): Scale up if True, scale down if False
-        """
-        if is_up:
-            target_instances = math.ceil(self.app_instances * self.autoscale_multiplier)
-            if target_instances > self.max_instances:
-                self.log.info("Reached the set maximum of instances %s", self.max_instances)
-                target_instances = self.max_instances
-        else:
-            target_instances = math.floor(self.app_instances / self.autoscale_multiplier)
-            if target_instances < self.min_instances:
-                self.log.info("Reached the set minimum of instances %s", self.min_instances)
-                target_instances = self.min_instances
-
-        self.log.debug("scale_app: app_instances %s target_instances %s",
-                       self.app_instances, target_instances)
-        if self.app_instances != target_instances:
-            data = {'instances': target_instances}
-            json_data = json.dumps(data)
-            response = self.dcos_rest("put",
-                                      '/service/marathon/v2/apps/' + self.marathon_app,
-                                      data=json_data)
-            #self.log.debug("scale_app returned status code %s", response.status_code)
-            # self.app_instances will be updated next time get_app_details is called
-            self.log.debug("scale_app %s", response)
 
     def get_app_details(self):
         """Retrieve metadata about marathon_app
@@ -709,11 +658,8 @@ class Autoscaler():
         """Main function
         Runs the query - compute - act cycle
         """
+        # TODO clean this up - running is never actually modified to be non-1
         running = 1
-        
-        # These are duplicates of init; TODO remove
-        # self.cool_down = 0
-        # self.trigger_var = 0
 
         while running == 1:
             marathon_apps = self.get_all_apps()
@@ -742,7 +688,11 @@ class Autoscaler():
                 if num_of_messages == -1.0:
                     self.timer()
                     continue
-                self.autoscale_sqs(num_of_messages)    
+
+                self.autoscale_metric("SQS Queue length", 
+                                      num_of_messages,
+                                      self.min_sqs_length,
+                                      self.min_sqs_length)
             
             # Otherwise, process based on and/or/cpu/mem logic
             else:
