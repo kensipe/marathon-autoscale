@@ -37,6 +37,8 @@ class Autoscaler():
     """
     ERR_THRESHOLD = 10 # Maximum number of attempts to decode a response
     LOGGING_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    # UP = 1
+    # DOWN = -1
 
     def __init__(self):
         """Initialize the object with data from the command line or environment
@@ -46,6 +48,10 @@ class Autoscaler():
         self.app_instances = 0
         self.trigger_var = 0
         self.cool_down = 0
+
+        # TODO replace trigger_var with scale_up_counter and cool_down with scale_down_counter
+        self.scale_up_counter = 0
+        self.scale_down_counter = 0
         self.dcos_headers = {}
 
         self.parse_arguments()
@@ -304,38 +310,95 @@ class Autoscaler():
                 self.log.info("Mem usage not exceeding threshold")
 
     def autoscale_sqs(self, num_of_messages):
-        if self.min_sqs_length <= num_of_messages <= self.max_sqs_length:
-            self.log.info("Queue length within thresholds")
-            self.trigger_var = 0
-            self.cool_down = 0
-        elif ((num_of_messages > self.max_sqs_length) and
-                (self.trigger_var >= self.trigger_number)):
-            self.log.info("Autoscale triggered based on queue exceeding threshold")
-            self.scale_app(True)
-            self.trigger_var = 0
-        elif ((num_of_messages < self.max_sqs_length) and
-                (self.cool_down >= self.cool_down_factor)):
-            self.log.info("Autoscale triggered based on queue below the threshold")
-            self.scale_app(False)
-            self.cool_down = 0
+        direction = 0
+        # Below min threshold
+        if num_of_messages < self.min_sqs_length:
+            self.log.info(("Queue length [{length}] "
+                            "below min threshold [{threshold}]")
+                            .format(length=num_of_messages,
+                                    threshold=self.min_sqs_length))
+            direction = -1
+            
+        # Above max threshold
         elif num_of_messages > self.max_sqs_length:
-            self.trigger_var += 1
-            self.cool_down = 0
-            self.log.info(("Queue length exceeded but waiting for "
-                            "trigger_number to be exceeded too to scale "
-                            "up %s of %s"),
-                            self.trigger_var, self.trigger_number)
-        elif num_of_messages < self.max_sqs_length:
-            self.cool_down += 1
-            self.trigger_var = 0
-            self.log.info(("Queue length are not exceeded but waiting for "
-                            "cool_down to be exceeded too to scale down"
-                            " %s of %s"),
-                            self.cool_down, self.cool_down_factor)
+            self.log.info(("Queue length [{length}] "
+                            "above max threshold [{threshold}]")
+                            .format(length=num_of_messages,
+                                    threshold=self.min_sqs_length))
+            direction = 1
+            
+        # Within threshold
         else:
-            self.log.info("Queue length not exceeding threshold")
+            self.log.info("Queue length within thresholds")
+        
+        count_and_scale_app(direction)
 
+    # This will eventually replace scale_app
+    def count_and_scale_app(self, direction):
+        """Scale marathon_app up or down
+        Args:
+            direction(1/0/-1): Scale up, stay, or down
+        """
+        # Scale up: increment counter, and if counter matches delay, scale up
+        if direction == 1:
+            self.scale_up_counter += 1
+            self.scale_down_counter = 0
 
+            if self.scale_up_counter >= self.scale_up_delay:
+                self.log.info("Scaling up")
+                self.scale_up_counter = 0
+
+                target_instances = math.ceil(self.app_instances * self.autoscale_multiplier)
+                if target_instances > self.max_instances:
+                    self.log.info("Reached the set maximum of instances %s", self.max_instances)
+                    target_instances = self.max_instances
+
+            else:
+                self.log.info(("Waiting for threshold "
+                               "violation count ({count}/{delay})")
+                              .format(count=self.scale_up_counter,
+                                      delay=self.scale_up_delay))
+        
+        # Scale down: increment counter, and if counter matches delay, scale down
+        elif direction == -1:
+            self.scale_down_counter += 1
+            self.scale_up_counter = 0
+
+            if self.scale_down_counter >= self.scale_down_delay:
+                self.log.info("Scaling down")
+                self.scale_down_counter = 0
+
+                target_instances = math.floor(self.app_instances / self.autoscale_multiplier)
+                if target_instances < self.min_instances:
+                    self.log.info("Reached the set minimum of instances %s", self.min_instances)
+                    target_instances = self.min_instances
+
+            else:
+                self.log.info(("Waiting for threshold "
+                               "violation count ({count}/{delay})")
+                              .format(count=self.scale_down_counter,
+                                      delay=self.scale_down_delay))
+        
+        else:
+            self.scale_up_counter = 0
+            self.scale_down_counter = 0
+
+        if direction != 0:
+            self.log.debug("Scale app: app_instances %s, target_instances %s",
+                        self.app_instances, target_instances)
+
+            if self.app_instances != target_instances:
+                data = {'instances': target_instances}
+                json_data = json.dumps(data)
+                response = self.dcos_rest("put",
+                                        '/service/marathon/v2/apps/' + self.marathon_app,
+                                        data=json_data)
+                #self.log.debug("scale_app returned status code %s", response.status_code)
+                # self.app_instances will be updated next time get_app_details is called
+                # TODO handle errors
+                self.log.debug("scale_app %s", response)
+
+    # This will eventually be removed and replaced with count_and_scale_app (hence repeated code)
     def scale_app(self, is_up):
         """Scale marathon_app up or down
         Args:
@@ -495,12 +558,18 @@ class Autoscaler():
         self.max_instances = float(args.max_instances)
         self.marathon_app = args.marathon_app
         self.min_instances = float(args.min_instances)
-        self.cool_down_factor = float(args.cool_down_factor)
-        self.trigger_number = float(args.trigger_number)
         self.interval = args.interval
         self.verbose = args.verbose or os.environ.get("AS_VERBOSE")
         self.min_sqs_length = float(args.min_sqs_length)
         self.max_sqs_length = float(args.max_sqs_length)
+
+        self.cool_down_factor = float(args.cool_down_factor)
+        self.trigger_number = float(args.trigger_number)
+
+        # The above variables are confusingly named; TODO rename completely, for now just copy
+        self.scale_down_delay = self.cool_down_factor
+        self.scale_up_delay   = self.trigger_number
+
 
 
     def get_task_agent_stats(self, task, agent):
@@ -648,8 +717,11 @@ class Autoscaler():
         Runs the query - compute - act cycle
         """
         running = 1
-        self.cool_down = 0
-        self.trigger_var = 0
+        
+        # These are duplicates of init; TODO remove
+        # self.cool_down = 0
+        # self.trigger_var = 0
+
         while running == 1:
             marathon_apps = self.get_all_apps()
             self.log.debug("The following apps exist in marathon %s", marathon_apps)
