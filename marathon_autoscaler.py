@@ -464,7 +464,10 @@ class Autoscaler():
         self.trigger_mode = args.trigger_mode
         self.autoscale_multiplier = float(args.autoscale_multiplier)
         self.max_instances = float(args.max_instances)
-        self.marathon_app = args.marathon_app
+        if args.marathon_app[0] == '/':
+            self.marathon_app = args.marathon_app
+        else:
+            self.marathon_app = '/' + args.marathon_app
         self.min_instances = float(args.min_instances)
         self.interval = args.interval
         self.verbose = args.verbose or os.environ.get("AS_VERBOSE")
@@ -473,6 +476,9 @@ class Autoscaler():
 
         self.cool_down_factor = float(args.cool_down_factor)
         self.trigger_number = float(args.trigger_number)
+
+        self.scale_up_delay = self.trigger_number
+        self.scale_down_delay = self.cool_down_factor
 
 
     def get_task_agent_stats(self, task, agent):
