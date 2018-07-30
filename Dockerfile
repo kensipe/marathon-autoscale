@@ -1,5 +1,5 @@
 FROM python:3-alpine
-ADD /requirements /marathon-autoscale/
+ADD /requirements.txt /marathon-autoscale/
 WORKDIR /marathon-autoscale
 RUN apk add --update --virtual .build-dependencies openssl-dev libffi-dev python-dev make gcc g++
 RUN pip install -r requirements.txt
