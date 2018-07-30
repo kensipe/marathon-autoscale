@@ -282,14 +282,18 @@ class Autoscaler():
             self.scale_down_counter = 0
 
             if self.scale_up_counter >= self.scale_up_delay:
-                self.log.info("Scaling up")
-                self.scale_up_counter = 0
-
                 target_instances = math.ceil(self.app_instances * self.autoscale_multiplier)
                 if target_instances > self.max_instances:
                     self.log.info("Reached the set maximum of instances %s", self.max_instances)
                     target_instances = self.max_instances
 
+                self.log.info(("Threshold "
+                               "violation count ({count}/{delay}) hit, scaling up "
+                               "to {instances} instances.")
+                              .format(count=self.scale_up_counter,
+                                      delay=self.scale_up_delay,
+                                      instances=target_instances))
+                self.scale_up_counter = 0
             else:
                 self.log.info(("Waiting for threshold "
                                "violation count ({count}/{delay})")
@@ -303,13 +307,18 @@ class Autoscaler():
             self.scale_up_counter = 0
 
             if self.scale_down_counter >= self.scale_down_delay:
-                self.log.info("Scaling down")
-                self.scale_down_counter = 0
-
                 target_instances = math.floor(self.app_instances / self.autoscale_multiplier)
                 if target_instances < self.min_instances:
                     self.log.info("Reached the set minimum of instances %s", self.min_instances)
                     target_instances = self.min_instances
+
+                self.log.info(("Threshold "
+                               "violation count ({count}/{delay}) hit, scaling down "
+                               "to {instances} instances.")
+                              .format(count=self.scale_up_counter,
+                                      delay=self.scale_up_delay,
+                                      instances=target_instances))
+                self.scale_down_counter = 0
 
             else:
                 self.log.info(("Waiting for threshold "
