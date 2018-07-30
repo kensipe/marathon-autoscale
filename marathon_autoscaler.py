@@ -295,6 +295,7 @@ class Autoscaler():
                                "violation count ({count}/{delay})")
                               .format(count=self.scale_up_counter,
                                       delay=self.scale_up_delay))
+                direction = 0
         
         # Scale down: increment counter, and if counter matches delay, scale down
         elif direction == -1:
@@ -315,6 +316,7 @@ class Autoscaler():
                                "violation count ({count}/{delay})")
                               .format(count=self.scale_down_counter,
                                       delay=self.scale_down_delay))
+                direction = 0
         
         else:
             self.scale_up_counter = 0
@@ -477,8 +479,8 @@ class Autoscaler():
         self.cool_down_factor = float(args.cool_down_factor)
         self.trigger_number = float(args.trigger_number)
 
-        self.scale_up_delay = self.trigger_number
-        self.scale_down_delay = self.cool_down_factor
+        self.scale_up_delay = int(self.trigger_number)
+        self.scale_down_delay = int(self.cool_down_factor)
 
 
     def get_task_agent_stats(self, task, agent):
