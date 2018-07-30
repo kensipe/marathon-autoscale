@@ -282,18 +282,23 @@ class Autoscaler():
             self.scale_down_counter = 0
 
             if self.scale_up_counter >= self.scale_up_delay:
+                self.log.info(("Scale up threshold "
+                               "violation count ({count}/{delay}) hit.")
+                              .format(count=self.scale_up_counter,
+                                      delay=self.scale_up_delay))
+
                 target_instances = math.ceil(self.app_instances * self.autoscale_multiplier)
-                if target_instances > self.max_instances:
-                    self.log.info("Reached the set maximum of instances %s", self.max_instances)
+                self.scale_up_counter = 0
+
+                if self.app_instances >= self.max_instances:
+                    self.log.info("Already at maximum number of instances %s",
+                                  self.max_instances)
+                    direction = 0
+                elif target_instances >= self.max_instances:
+                    self.log.info("Reached set maximum of instances %s",
+                                  self.max_instances)
                     target_instances = self.max_instances
 
-                self.log.info(("Threshold "
-                               "violation count ({count}/{delay}) hit, scaling up "
-                               "to {instances} instances.")
-                              .format(count=self.scale_up_counter,
-                                      delay=self.scale_up_delay,
-                                      instances=target_instances))
-                self.scale_up_counter = 0
             else:
                 self.log.info(("Waiting for threshold "
                                "violation count ({count}/{delay})")
@@ -307,18 +312,22 @@ class Autoscaler():
             self.scale_up_counter = 0
 
             if self.scale_down_counter >= self.scale_down_delay:
-                target_instances = math.floor(self.app_instances / self.autoscale_multiplier)
-                if target_instances < self.min_instances:
-                    self.log.info("Reached the set minimum of instances %s", self.min_instances)
-                    target_instances = self.min_instances
+                self.log.info(("Scale down threshold "
+                               "violation count ({count}/{delay}) hit.")
+                              .format(count=self.scale_down_counter,
+                                      delay=self.scale_down_delay))
 
-                self.log.info(("Threshold "
-                               "violation count ({count}/{delay}) hit, scaling down "
-                               "to {instances} instances.")
-                              .format(count=self.scale_up_counter,
-                                      delay=self.scale_up_delay,
-                                      instances=target_instances))
+                target_instances = math.floor(self.app_instances / self.autoscale_multiplier)
                 self.scale_down_counter = 0
+
+                if self.app_instances <= self.min_instances:
+                    self.log.info("Already at minimum number of instances %s",
+                                  self.min_instances)
+                    direction = 0
+                elif target_instances <= self.min_instances:
+                    self.log.info("Reached set minimum of instances %s",
+                                  self.min_instances)
+                    target_instances = self.min_instances
 
             else:
                 self.log.info(("Waiting for threshold "
@@ -332,7 +341,7 @@ class Autoscaler():
             self.scale_down_counter = 0
 
         if direction != 0:
-            self.log.debug("Scale app: app_instances %s, target_instances %s",
+            self.log.info("Scale app: app_instances %s, target_instances %s",
                         self.app_instances, target_instances)
 
             if self.app_instances != target_instances:
